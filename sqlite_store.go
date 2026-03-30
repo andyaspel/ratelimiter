@@ -3,6 +3,9 @@ package ratelimiter
 import (
 	"context"
 	"database/sql"
+	"fmt"
+	"mime"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -109,7 +112,12 @@ func (s *SQLiteStore) SaveFileFromPath(ctx context.Context, path string) (Stored
 		return StoredFile{}, err
 	}
 
-	return s.SaveFile(ctx, filepath.Base(path), "application/octet-stream", data)
+	contentType := mime.TypeByExtension(filepath.Ext(path))
+	if contentType == "" {
+		contentType = http.DetectContentType(data)
+	}
+
+	return s.SaveFile(ctx, filepath.Base(path), contentType, data)
 }
 
 // ListFiles returns saved file metadata without loading full BLOB contents.
@@ -134,7 +142,10 @@ func (s *SQLiteStore) ListFiles(ctx context.Context) ([]StoredFile, error) {
 		if err := rows.Scan(&file.ID, &file.Name, &file.ContentType, &file.Size, &createdAt); err != nil {
 			return nil, err
 		}
-		file.CreatedAt, _ = time.Parse(time.RFC3339Nano, createdAt)
+		file.CreatedAt, err = parseStoredFileTime(createdAt)
+		if err != nil {
+			return nil, err
+		}
 		files = append(files, file)
 	}
 	if err := rows.Err(); err != nil {
@@ -163,8 +174,19 @@ func (s *SQLiteStore) GetFile(ctx context.Context, id int64) (StoredFile, error)
 	if err != nil {
 		return StoredFile{}, err
 	}
-	file.CreatedAt, _ = time.Parse(time.RFC3339Nano, createdAt)
+	file.CreatedAt, err = parseStoredFileTime(createdAt)
+	if err != nil {
+		return StoredFile{}, err
+	}
 	return file, nil
+}
+
+func parseStoredFileTime(value string) (time.Time, error) {
+	parsed, err := time.Parse(time.RFC3339Nano, value)
+	if err != nil {
+		return time.Time{}, fmt.Errorf("%w: %q", ErrInvalidStoredTimestamp, value)
+	}
+	return parsed, nil
 }
 
 func (s *SQLiteStore) ensureSchema(ctx context.Context) error {

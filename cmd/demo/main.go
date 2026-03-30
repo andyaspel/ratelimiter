@@ -109,6 +109,9 @@ func runServe(logger *slog.Logger, args []string) error {
 	capacity := fs.Int("capacity", 10, "token bucket capacity")
 	refillRate := fs.Int("refill", 5, "tokens added per second")
 	if err := fs.Parse(args); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			return nil
+		}
 		return err
 	}
 
@@ -156,6 +159,9 @@ func runSave(logger *slog.Logger, args []string) error {
 	dbPath := fs.String("db", "ratelimiter.db", "SQLite database path")
 	filePath := fs.String("file", "", "Path to a file to save")
 	if err := fs.Parse(args); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			return nil
+		}
 		return err
 	}
 	if *filePath == "" {
@@ -182,6 +188,9 @@ func runList(logger *slog.Logger, args []string) error {
 	fs := flag.NewFlagSet("list", flag.ContinueOnError)
 	dbPath := fs.String("db", "ratelimiter.db", "SQLite database path")
 	if err := fs.Parse(args); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			return nil
+		}
 		return err
 	}
 

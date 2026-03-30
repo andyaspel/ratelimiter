@@ -79,7 +79,11 @@ func NewIPRateLimitMiddlewareWithConfig(cfg ClientMiddlewareConfig) (func(http.H
 		}
 
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			rl := store.limiterForRequest(r)
+			rl, err := store.limiterForRequest(r)
+			if err != nil {
+				http.Error(w, ErrRateLimiterUnavailable.Error(), http.StatusServiceUnavailable)
+				return
+			}
 			if !rl.Allow() {
 				setRetryAfterHeader(w, rl.NextAvailable())
 				if cfg.OnLimit != nil {
@@ -123,7 +127,7 @@ func RealIPKeyFunc(trustForwardedIP bool) ClientKeyFunc {
 	}
 }
 
-func (s *clientLimiterStore) limiterForRequest(r *http.Request) *RateLimiter {
+func (s *clientLimiterStore) limiterForRequest(r *http.Request) (*RateLimiter, error) {
 	key := s.cfg.KeyFunc(r)
 	if key == "" {
 		key = "unknown"
@@ -141,19 +145,19 @@ func (s *clientLimiterStore) limiterForRequest(r *http.Request) *RateLimiter {
 
 	if entry, ok := s.entries[key]; ok {
 		entry.lastSeen = now
-		return entry.limiter
+		return entry.limiter, nil
 	}
 
 	rl, err := NewTokenBucketRateLimiterWithClock(s.cfg.Capacity, s.cfg.RefillRate, s.cfg.Clock)
 	if err != nil {
-		return &RateLimiter{}
+		return nil, err
 	}
 
 	s.entries[key] = &clientLimiterEntry{
 		limiter:  rl,
 		lastSeen: now,
 	}
-	return rl
+	return rl, nil
 }
 
 func (s *clientLimiterStore) cleanupLocked(now time.Time) {

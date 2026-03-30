@@ -1,6 +1,7 @@
 package ratelimiter
 
 import (
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -135,5 +136,26 @@ func TestNewIPRateLimitMiddleware_CleansUpIdleClients(t *testing.T) {
 	handler.ServeHTTP(retryA, reqA)
 	if retryA.Code != http.StatusOK {
 		t.Fatalf("expected evicted client-a to receive a fresh bucket, got %d", retryA.Code)
+	}
+}
+
+func TestClientLimiterStore_ReturnsErrorForInvalidConfig(t *testing.T) {
+	fc := &fakeClock{now: time.Unix(0, 0)}
+	store := &clientLimiterStore{
+		entries: make(map[string]*clientLimiterEntry),
+		cfg: ClientMiddlewareConfig{
+			Capacity:   0,
+			RefillRate: 1,
+			Clock:      fc,
+			KeyFunc: func(r *http.Request) string {
+				return "client-a"
+			},
+		},
+		lastCleanup: fc.Now(),
+	}
+
+	_, err := store.limiterForRequest(httptest.NewRequest(http.MethodGet, "/", nil))
+	if !errors.Is(err, ErrInvalidCapacity) {
+		t.Fatalf("expected ErrInvalidCapacity, got %v", err)
 	}
 }

@@ -99,3 +99,30 @@ func TestNewRedisIPRateLimitMiddleware_SeparatesClients(t *testing.T) {
 		t.Fatalf("expected client-b to have its own bucket, got %d", firstB.Code)
 	}
 }
+
+func TestNewRedisIPRateLimitMiddleware_ReturnsServiceUnavailableWhenRedisDown(t *testing.T) {
+	srv, err := miniredis.Run()
+	if err != nil {
+		t.Fatalf("expected miniredis to start: %v", err)
+	}
+
+	client := redis.NewClient(&redis.Options{Addr: srv.Addr(), MaxRetries: 0})
+	defer client.Close()
+
+	mw, err := NewRedisIPRateLimitMiddleware(client, "ratelimiter:test:http", 1, 1, nil)
+	if err != nil {
+		t.Fatalf("expected redis middleware to be created: %v", err)
+	}
+
+	srv.Close()
+
+	handler := mw(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	res := httptest.NewRecorder()
+	handler.ServeHTTP(res, httptest.NewRequest(http.MethodGet, "/", nil))
+	if res.Code != http.StatusServiceUnavailable {
+		t.Fatalf("expected Redis outage to return 503, got %d", res.Code)
+	}
+}

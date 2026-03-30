@@ -70,17 +70,27 @@ func NewRedisIPRateLimitMiddlewareWithConfig(cfg RedisMiddlewareConfig) (func(ht
 				key = "unknown"
 			}
 
-			rl, err := NewRedisRateLimiterWithClockAndTTL(
+			bucket, err := NewRedisTokenBucketWithTTL(
 				cfg.Client,
 				cfg.Prefix+":"+key,
 				cfg.Capacity,
 				cfg.RefillRate,
-				cfg.Clock,
 				cfg.EntryTTL,
 			)
-			if err != nil || !rl.Allow() {
-				if rl != nil {
-					setRetryAfterHeader(w, rl.NextAvailable())
+			if err != nil {
+				http.Error(w, ErrRateLimiterUnavailable.Error(), http.StatusServiceUnavailable)
+				return
+			}
+
+			allowed, err := bucket.AllowWithError(cfg.Clock)
+			if err != nil {
+				http.Error(w, ErrRateLimiterUnavailable.Error(), http.StatusServiceUnavailable)
+				return
+			}
+			if !allowed {
+				wait, err := bucket.NextAvailableWithError(cfg.Clock)
+				if err == nil {
+					setRetryAfterHeader(w, wait)
 				}
 				if cfg.OnLimit != nil {
 					cfg.OnLimit(w, r)

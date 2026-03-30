@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## v0.3.1
+
+### Reliability fixes
+
+- Redis-backed middleware now returns `503 Service Unavailable` on backing-store failures instead of treating outages as normal rate limits
+- SQLite file loading now reports invalid stored timestamps explicitly
+- CLI help commands (`serve -h`, `save -h`, `list -h`) now exit cleanly without failing
+- file-path saves detect a more accurate content type before storing to SQLite
+
 ## v0.3.0
 
 ### Added

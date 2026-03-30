@@ -2,8 +2,10 @@ package ratelimiter
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -58,5 +60,34 @@ func TestSQLiteStore_SaveFileFromPath(t *testing.T) {
 	}
 	if saved.Name != "sample.txt" {
 		t.Fatalf("expected file name to be preserved, got %q", saved.Name)
+	}
+	if !strings.HasPrefix(saved.ContentType, "text/plain") {
+		t.Fatalf("expected text content type to be detected, got %q", saved.ContentType)
+	}
+}
+
+func TestSQLiteStore_ListFilesRejectsInvalidTimestamp(t *testing.T) {
+	store, err := OpenSQLiteStore(filepath.Join(t.TempDir(), "files.db"))
+	if err != nil {
+		t.Fatalf("expected SQLite store to open: %v", err)
+	}
+	defer store.Close()
+
+	_, err = store.db.ExecContext(
+		context.Background(),
+		`INSERT INTO stored_files (name, content_type, size, data, created_at) VALUES (?, ?, ?, ?, ?)`,
+		"broken.txt",
+		"text/plain",
+		1,
+		[]byte("x"),
+		"not-a-time",
+	)
+	if err != nil {
+		t.Fatalf("expected invalid row insert to succeed for test setup: %v", err)
+	}
+
+	_, err = store.ListFiles(context.Background())
+	if !errors.Is(err, ErrInvalidStoredTimestamp) {
+		t.Fatalf("expected ErrInvalidStoredTimestamp, got %v", err)
 	}
 }

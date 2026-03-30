@@ -55,11 +55,12 @@ return {allowed, wait}
 // RedisTokenBucket stores token bucket state in Redis so multiple app instances
 // can share a single rate limit.
 type RedisTokenBucket struct {
-	client     redis.UniversalClient
-	key        string
-	capacity   int
-	refillRate int
-	ttl        time.Duration
+	client           redis.UniversalClient
+	key              string
+	capacity         int
+	refillRate       int
+	ttl              time.Duration
+	operationTimeout time.Duration
 }
 
 func NewRedisTokenBucket(client redis.UniversalClient, key string, capacity int, refillRate int) (*RedisTokenBucket, error) {
@@ -84,11 +85,12 @@ func NewRedisTokenBucketWithTTL(client redis.UniversalClient, key string, capaci
 	}
 
 	return &RedisTokenBucket{
-		client:     client,
-		key:        strings.TrimSpace(key),
-		capacity:   capacity,
-		refillRate: refillRate,
-		ttl:        ttl,
+		client:           client,
+		key:              strings.TrimSpace(key),
+		capacity:         capacity,
+		refillRate:       refillRate,
+		ttl:              ttl,
+		operationTimeout: 3 * time.Second,
 	}, nil
 }
 
@@ -109,16 +111,26 @@ func NewRedisRateLimiterWithClockAndTTL(client redis.UniversalClient, key string
 }
 
 func (tb *RedisTokenBucket) Allow(clock Clock) bool {
-	allowed, _, err := tb.run(clock, true)
+	allowed, err := tb.AllowWithError(clock)
 	return err == nil && allowed
 }
 
+func (tb *RedisTokenBucket) AllowWithError(clock Clock) (bool, error) {
+	allowed, _, err := tb.run(clock, true)
+	return allowed, err
+}
+
 func (tb *RedisTokenBucket) NextAvailable(clock Clock) time.Duration {
-	_, wait, err := tb.run(clock, false)
+	wait, err := tb.NextAvailableWithError(clock)
 	if err != nil {
 		return 0
 	}
 	return wait
+}
+
+func (tb *RedisTokenBucket) NextAvailableWithError(clock Clock) (time.Duration, error) {
+	_, wait, err := tb.run(clock, false)
+	return wait, err
 }
 
 func (tb *RedisTokenBucket) run(clock Clock, consume bool) (bool, time.Duration, error) {
@@ -131,8 +143,15 @@ func (tb *RedisTokenBucket) run(clock Clock, consume bool) (bool, time.Duration,
 		consumeFlag = 1
 	}
 
+	timeout := tb.operationTimeout
+	if timeout <= 0 {
+		timeout = 3 * time.Second
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
 	cmd := redisTokenBucketScript.Run(
-		context.Background(),
+		ctx,
 		tb.client,
 		[]string{tb.key},
 		tb.capacity,

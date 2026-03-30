@@ -91,7 +91,7 @@ mux := http.NewServeMux()
 mux.Handle("/api", middleware(http.HandlerFunc(apiHandler)))
 ```
 
-Use Redis-backed middleware when your app runs across multiple instances and needs a shared global limit.
+Use Redis-backed middleware when your app runs across multiple instances and needs a shared global limit. If Redis becomes unavailable, the middleware now returns `503 Service Unavailable` rather than masking the outage as a normal rate limit response.
 
 ## Development checks
 
