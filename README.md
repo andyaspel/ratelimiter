@@ -5,7 +5,7 @@ A small, concurrency-safe Go rate limiter package with plug-and-play `net/http` 
 ## Features
 
 - token bucket strategy
-- shared or per-client HTTP middleware
+- shared, per-client, or Redis-backed HTTP middleware
 - `Retry-After` support on `429 Too Many Requests`
 - input validation for safer configuration
 - race-tested, unit-tested behavior
@@ -56,6 +56,21 @@ mux.Handle("/api", middleware(http.HandlerFunc(apiHandler)))
 ```
 
 If you run behind a trusted reverse proxy, use `NewIPRateLimitMiddlewareWithConfig` and set `TrustForwardedIP: true`.
+
+## Redis / distributed limiting
+
+```go
+client := redis.NewClient(&redis.Options{Addr: "localhost:6379"})
+middleware, err := ratelimiter.NewRedisIPRateLimitMiddleware(client, "ratelimiter:api", 20, 10, nil)
+if err != nil {
+    log.Fatal(err)
+}
+
+mux := http.NewServeMux()
+mux.Handle("/api", middleware(http.HandlerFunc(apiHandler)))
+```
+
+Use Redis-backed middleware when your app runs across multiple instances and needs a shared global limit.
 
 ## Development checks
 

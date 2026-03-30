@@ -6,6 +6,8 @@ var (
 	ErrContextCanceled   = errors.New("ratelimiter: context canceled")
 	ErrNilRateLimiter    = errors.New("ratelimiter: nil rate limiter")
 	ErrNilStrategy       = errors.New("ratelimiter: nil strategy")
+	ErrNilRedisClient    = errors.New("ratelimiter: nil Redis client")
+	ErrEmptyRedisKey     = errors.New("ratelimiter: Redis key must not be empty")
 	ErrInvalidCapacity   = errors.New("ratelimiter: capacity must be greater than zero")
 	ErrInvalidRefillRate = errors.New("ratelimiter: refill rate must be greater than zero")
 )

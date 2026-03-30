@@ -23,5 +23,7 @@ Per-client IP limiting:
 		log.Fatal(err)
 	}
 	mux.Handle("/", middleware(http.HandlerFunc(handler)))
+
+For distributed deployments, use the Redis-backed middleware helpers.
 */
 package ratelimiter
