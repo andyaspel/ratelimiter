@@ -2,16 +2,29 @@
 
 All notable changes to this project will be documented in this file.
 
-## v0.2.0
+## v0.3.0
 
 ### Added
+
+- request logging middleware via `RequestLoggerMiddleware`
+- SQLite-backed file storage for the demo executable and CLI workflows
+- upload/list/download flows in `cmd/demo`
+
+### Improved
+
+- `.gitignore` now excludes local SQLite database files
+- package docs now cover logging and SQLite usage
+
+## v0.2.0
+
+### Major additions
 
 - publish-ready module metadata for `github.com/andyaspel/ratelimiter`
 - plug-and-play per-client middleware helpers
 - improved test coverage, race checks, and CI workflow
 - optional Redis-backed distributed rate limiting support
 
-### Improved
+### Notable improvements
 
 - safer configuration validation
 - better HTTP `429` behavior with `Retry-After`

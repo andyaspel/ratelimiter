@@ -22,5 +22,10 @@ go.work.sum
 .DS_Store
 Thumbs.db
 
+# SQLite demo data
+*.db
+*.sqlite
+*.sqlite3
+
 # Local notes
 copilot.txt
