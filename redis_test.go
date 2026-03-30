@@ -106,7 +106,15 @@ func TestNewRedisIPRateLimitMiddleware_ReturnsServiceUnavailableWhenRedisDown(t 
 		t.Fatalf("expected miniredis to start: %v", err)
 	}
 
-	client := redis.NewClient(&redis.Options{Addr: srv.Addr(), MaxRetries: 0})
+	client := redis.NewClient(&redis.Options{
+		Addr:            srv.Addr(),
+		MaxRetries:      0,
+		DialTimeout:     50 * time.Millisecond,
+		ReadTimeout:     50 * time.Millisecond,
+		WriteTimeout:    50 * time.Millisecond,
+		MinRetryBackoff: -1,
+		MaxRetryBackoff: -1,
+	})
 	defer client.Close()
 
 	mw, err := NewRedisIPRateLimitMiddleware(client, "ratelimiter:test:http", 1, 1, nil)

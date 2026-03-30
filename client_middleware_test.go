@@ -141,18 +141,17 @@ func TestNewIPRateLimitMiddleware_CleansUpIdleClients(t *testing.T) {
 
 func TestClientLimiterStore_ReturnsErrorForInvalidConfig(t *testing.T) {
 	fc := &fakeClock{now: time.Unix(0, 0)}
-	store := &clientLimiterStore{
-		entries: make(map[string]*clientLimiterEntry),
-		cfg: ClientMiddlewareConfig{
-			Capacity:   0,
-			RefillRate: 1,
-			Clock:      fc,
-			KeyFunc: func(r *http.Request) string {
-				return "client-a"
-			},
+	store := newClientLimiterStore(ClientMiddlewareConfig{
+		Capacity:        0,
+		RefillRate:      1,
+		Clock:           fc,
+		CleanupInterval: time.Minute,
+		EntryTTL:        time.Minute,
+		Shards:          1,
+		KeyFunc: func(r *http.Request) string {
+			return "client-a"
 		},
-		lastCleanup: fc.Now(),
-	}
+	})
 
 	_, err := store.limiterForRequest(httptest.NewRequest(http.MethodGet, "/", nil))
 	if !errors.Is(err, ErrInvalidCapacity) {

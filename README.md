@@ -57,6 +57,8 @@ mux.Handle("/api", middleware(http.HandlerFunc(apiHandler)))
 
 If you run behind a trusted reverse proxy, use `NewIPRateLimitMiddlewareWithConfig` and set `TrustForwardedIP: true`.
 
+For higher local throughput, you can also increase `ClientMiddlewareConfig.Shards` to reduce lock contention when many clients hit the same process.
+
 ## Logging
 
 ```go
@@ -98,6 +100,7 @@ Use Redis-backed middleware when your app runs across multiple instances and nee
 ```bash
 go test -v ./...
 go test -race ./...
+go test -bench . -run ^$
 go vet ./...
 ```
 

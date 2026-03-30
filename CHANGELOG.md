@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## v0.3.2
+
+### Performance improvements
+
+- per-client in-memory middleware now uses sharded state to reduce lock contention under high concurrency
+- benchmark coverage was added for local limiter hot paths and per-client store access
+
 ## v0.3.1
 
 ### Reliability fixes

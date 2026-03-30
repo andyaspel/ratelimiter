@@ -21,6 +21,7 @@ type ClientMiddlewareConfig struct {
 	TrustForwardedIP bool
 	CleanupInterval  time.Duration
 	EntryTTL         time.Duration
+	Shards           int // optional: number of in-memory shards for lower lock contention
 }
 
 type clientLimiterEntry struct {
@@ -28,11 +29,15 @@ type clientLimiterEntry struct {
 	lastSeen time.Time
 }
 
-type clientLimiterStore struct {
+type clientLimiterShard struct {
 	mu          sync.Mutex
 	entries     map[string]*clientLimiterEntry
-	cfg         ClientMiddlewareConfig
 	lastCleanup time.Time
+}
+
+type clientLimiterStore struct {
+	cfg    ClientMiddlewareConfig
+	shards []clientLimiterShard
 }
 
 // NewIPRateLimitMiddleware creates plug-and-play HTTP middleware with a
@@ -66,12 +71,11 @@ func NewIPRateLimitMiddlewareWithConfig(cfg ClientMiddlewareConfig) (func(http.H
 	if cfg.EntryTTL <= 0 {
 		cfg.EntryTTL = 10 * time.Minute
 	}
-
-	store := &clientLimiterStore{
-		entries:     make(map[string]*clientLimiterEntry),
-		cfg:         cfg,
-		lastCleanup: cfg.Clock.Now(),
+	if cfg.Shards <= 0 {
+		cfg.Shards = 32
 	}
+
+	store := newClientLimiterStore(cfg)
 
 	return func(next http.Handler) http.Handler {
 		if next == nil {
@@ -127,6 +131,23 @@ func RealIPKeyFunc(trustForwardedIP bool) ClientKeyFunc {
 	}
 }
 
+func newClientLimiterStore(cfg ClientMiddlewareConfig) *clientLimiterStore {
+	store := &clientLimiterStore{
+		cfg:    cfg,
+		shards: make([]clientLimiterShard, cfg.Shards),
+	}
+
+	now := cfg.Clock.Now()
+	for i := range store.shards {
+		store.shards[i] = clientLimiterShard{
+			entries:     make(map[string]*clientLimiterEntry),
+			lastCleanup: now,
+		}
+	}
+
+	return store
+}
+
 func (s *clientLimiterStore) limiterForRequest(r *http.Request) (*RateLimiter, error) {
 	key := s.cfg.KeyFunc(r)
 	if key == "" {
@@ -134,16 +155,17 @@ func (s *clientLimiterStore) limiterForRequest(r *http.Request) (*RateLimiter, e
 	}
 
 	now := s.cfg.Clock.Now()
+	shard := s.shardForKey(key)
 
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	shard.mu.Lock()
+	defer shard.mu.Unlock()
 
-	if now.Sub(s.lastCleanup) >= s.cfg.CleanupInterval {
-		s.cleanupLocked(now)
-		s.lastCleanup = now
+	if now.Sub(shard.lastCleanup) >= s.cfg.CleanupInterval {
+		s.cleanupLocked(shard, now)
+		shard.lastCleanup = now
 	}
 
-	if entry, ok := s.entries[key]; ok {
+	if entry, ok := shard.entries[key]; ok {
 		entry.lastSeen = now
 		return entry.limiter, nil
 	}
@@ -153,17 +175,26 @@ func (s *clientLimiterStore) limiterForRequest(r *http.Request) (*RateLimiter, e
 		return nil, err
 	}
 
-	s.entries[key] = &clientLimiterEntry{
+	shard.entries[key] = &clientLimiterEntry{
 		limiter:  rl,
 		lastSeen: now,
 	}
 	return rl, nil
 }
 
-func (s *clientLimiterStore) cleanupLocked(now time.Time) {
-	for key, entry := range s.entries {
+func (s *clientLimiterStore) shardForKey(key string) *clientLimiterShard {
+	var hash uint32 = 2166136261
+	for i := 0; i < len(key); i++ {
+		hash ^= uint32(key[i])
+		hash *= 16777619
+	}
+	return &s.shards[int(hash%uint32(len(s.shards)))]
+}
+
+func (s *clientLimiterStore) cleanupLocked(shard *clientLimiterShard, now time.Time) {
+	for key, entry := range shard.entries {
 		if now.Sub(entry.lastSeen) > s.cfg.EntryTTL {
-			delete(s.entries, key)
+			delete(shard.entries, key)
 		}
 	}
 }
